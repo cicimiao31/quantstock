@@ -136,48 +136,52 @@ async def get_stock_detail(code: str):
         except Exception:
             pass
 
-    # Main force money flow (主力持仓线)
+    # Main force money flow (主力资金流向) - Sina data source (stable)
     try:
         import asyncio
         import concurrent.futures
         import urllib.request
         import json as jsonlib
+        import re
 
         flow_url = (
-            f"https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get"
-            f"?secid={em_secid}&ut=fa5fd1943c7b386f172d6893dbbd4644"
-            f"&fields1=f1,f2,f3,f7"
-            f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65"
-            f"&lmt=60"
+            "https://vip.stock.finance.sina.com.cn/quotes_service/api/jsonp.php/"
+            f"var%20a/MoneyFlow.ssl_qsfx_zjlrqs?daima={sina_code}"
         )
 
         def _fetch_flow():
             req = urllib.request.Request(flow_url, headers={
                 "User-Agent": "Mozilla/5.0",
-                "Referer": "https://quote.eastmoney.com/",
+                "Referer": "https://finance.sina.com.cn/",
             })
             with urllib.request.urlopen(req, timeout=10) as resp:
-                return jsonlib.loads(resp.read().decode())
+                return resp.read().decode("gbk", "ignore")
 
         loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
-            flow_data = await loop.run_in_executor(pool, _fetch_flow)
+            raw = await loop.run_in_executor(pool, _fetch_flow)
 
-        klines = flow_data.get("data", {}).get("klines", [])
+        match = re.search(r"var a\((\[.*\])\)", raw, re.S)
         money_flow = []
-        for line in klines:
-            parts = line.split(",")
-            if len(parts) >= 12:
-                money_flow.append({
-                    "date": parts[0],
-                    "main_net": round(float(parts[1]) / 10000, 2),
-                    "small_net": round(float(parts[2]) / 10000, 2),
-                    "mid_net": round(float(parts[3]) / 10000, 2),
-                    "large_net": round(float(parts[4]) / 10000, 2),
-                    "xlarge_net": round(float(parts[5]) / 10000, 2),
-                    "main_pct": float(parts[6]) if parts[6] else 0,
-                    "close": float(parts[11]) if parts[11] else 0,
-                })
+        if match:
+            rows = jsonlib.loads(match.group(1))
+            # Sina returns newest first; take last 60 days and reverse to oldest-first
+            for row in reversed(rows[:60]):
+                try:
+                    main_net = float(row["netamount"]) / 10000
+                    xlarge_net = float(row["r0_net"]) / 10000
+                    money_flow.append({
+                        "date": row["opendate"],
+                        "main_net": round(main_net, 2),
+                        "xlarge_net": round(xlarge_net, 2),
+                        "large_net": round(main_net - xlarge_net, 2),
+                        "small_net": 0,
+                        "mid_net": 0,
+                        "main_pct": round(float(row["ratioamount"]) * 100, 2),
+                        "close": float(row["trade"]),
+                    })
+                except (KeyError, ValueError):
+                    continue
         result["money_flow"] = money_flow
     except Exception:
         pass
