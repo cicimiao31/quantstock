@@ -136,4 +136,50 @@ async def get_stock_detail(code: str):
         except Exception:
             pass
 
+    # Main force money flow (主力持仓线)
+    try:
+        import asyncio
+        import concurrent.futures
+        import urllib.request
+        import json as jsonlib
+
+        flow_url = (
+            f"https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get"
+            f"?secid={em_secid}&ut=fa5fd1943c7b386f172d6893dbbd4644"
+            f"&fields1=f1,f2,f3,f7"
+            f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65"
+            f"&lmt=60"
+        )
+
+        def _fetch_flow():
+            req = urllib.request.Request(flow_url, headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://quote.eastmoney.com/",
+            })
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return jsonlib.loads(resp.read().decode())
+
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            flow_data = await loop.run_in_executor(pool, _fetch_flow)
+
+        klines = flow_data.get("data", {}).get("klines", [])
+        money_flow = []
+        for line in klines:
+            parts = line.split(",")
+            if len(parts) >= 12:
+                money_flow.append({
+                    "date": parts[0],
+                    "main_net": round(float(parts[1]) / 10000, 2),
+                    "small_net": round(float(parts[2]) / 10000, 2),
+                    "mid_net": round(float(parts[3]) / 10000, 2),
+                    "large_net": round(float(parts[4]) / 10000, 2),
+                    "xlarge_net": round(float(parts[5]) / 10000, 2),
+                    "main_pct": float(parts[6]) if parts[6] else 0,
+                    "close": float(parts[11]) if parts[11] else 0,
+                })
+        result["money_flow"] = money_flow
+    except Exception:
+        pass
+
     return result

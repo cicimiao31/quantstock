@@ -5,6 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { StockChart } from "@/components/StockChart";
 import { StockSearch } from "@/components/StockSearch";
 import { FavoriteButton } from "@/components/FavoriteButton";
+import { MoneyFlowChart } from "@/components/MoneyFlowChart";
 import { api, Signal, PredictionResult, BacktestResult } from "@/lib/api";
 
 export default function AnalysisPage() {
@@ -88,6 +89,49 @@ function AnalysisContent() {
               </div>
               <StockChart code={code} />
             </div>
+
+            {/* 主力资金流向 */}
+            {detail && detail.money_flow && detail.money_flow.length > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 border dark:border-gray-700">
+                <h2 className="font-bold mb-3 dark:text-white">主力资金流向（近60日）</h2>
+                <MoneyFlowChart data={detail.money_flow} />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-sm">
+                  {(() => {
+                    const latest = detail.money_flow[detail.money_flow.length - 1];
+                    const sum5 = detail.money_flow.slice(-5).reduce((acc: number, d: any) => acc + d.main_net, 0);
+                    const sum10 = detail.money_flow.slice(-10).reduce((acc: number, d: any) => acc + d.main_net, 0);
+                    return (
+                      <>
+                        <div className="bg-gray-50 dark:bg-gray-700 p-2 rounded text-center">
+                          <div className="text-xs text-gray-400">今日主力净流入</div>
+                          <div className={`font-bold ${latest.main_net > 0 ? "text-red-500" : "text-green-500"}`}>
+                            {latest.main_net.toFixed(0)}万
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-700 p-2 rounded text-center">
+                          <div className="text-xs text-gray-400">今日主力占比</div>
+                          <div className={`font-bold ${latest.main_pct > 0 ? "text-red-500" : "text-green-500"}`}>
+                            {latest.main_pct.toFixed(2)}%
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-700 p-2 rounded text-center">
+                          <div className="text-xs text-gray-400">5日累计</div>
+                          <div className={`font-bold ${sum5 > 0 ? "text-red-500" : "text-green-500"}`}>
+                            {sum5.toFixed(0)}万
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-700 p-2 rounded text-center">
+                          <div className="text-xs text-gray-400">10日累计</div>
+                          <div className={`font-bold ${sum10 > 0 ? "text-red-500" : "text-green-500"}`}>
+                            {sum10.toFixed(0)}万
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
 
             {/* 盘口 + 基本面 */}
             {detail && (detail.quote || detail.fundamentals) && (
